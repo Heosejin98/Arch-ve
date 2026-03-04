@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Arch Violation Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Pretendard:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg:       #0d0f12;
+    --surface:  #13161b;
+    --border:   #1e2330;
+    --accent:   #e05c3a;
+    --green:    #3adb76;
+    --yellow:   #f0c040;
+    --blue:     #4a90e2;
+    --muted:    #4a5160;
+    --text:     #c8cdd8;
+    --text-dim: #6b7280;
+    --mono:     'JetBrains Mono', monospace;
+    --sans:     'Pretendard', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--surface);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .logo span { color: var(--text-dim); font-weight: 300; }
+  .repo-filter {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .repo-filter label { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+  .repo-filter input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 4px;
+    width: 200px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .repo-filter input:focus { border-color: var(--accent); }
+  .btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    transition: opacity 0.15s;
+  }
+  .btn:hover { opacity: 0.85; }
+
+  /* ── Layout ── */
+  main {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 28px 32px;
+    display: grid;
+    gap: 20px;
+  }
+
+  /* ── Summary Cards ── */
+  .summary-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+  .card.red::before   { background: var(--accent); }
+  .card.green::before { background: var(--green); }
+  .card.blue::before  { background: var(--blue); }
+  .card.yellow::before{ background: var(--yellow); }
+
+  .card-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .card-value {
+    font-family: var(--mono);
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .card-value.red    { color: var(--accent); }
+  .card-value.green  { color: var(--green); }
+  .card-value.blue   { color: var(--blue); }
+  .card-value.yellow { color: var(--yellow); }
+  .card-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 6px;
+    font-family: var(--mono);
+  }
+
+  /* ── Two-col grid ── */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  .full-col { grid-column: 1 / -1; }
+
+  /* ── Section Header ── */
+  .section-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── Layer Violation Heatmap ── */
+  .heatmap-wrap { overflow-x: auto; }
+  .heatmap-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .heatmap-table th {
+    text-align: left;
+    padding: 8px 12px;
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+  .heatmap-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid rgba(30,35,48,0.6);
+  }
+  .heatmap-table tr:last-child td { border-bottom: none; }
+  .heatmap-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .layer-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .layer-badge.presentation { background: #1a2a40; color: #4a90e2; }
+  .layer-badge.domains      { background: #1a3028; color: #3adb76; }
+  .layer-badge.infrastructure { background: #2a2218; color: #f0c040; }
+  .layer-badge.data_access  { background: #2a1a1a; color: #e05c3a; }
+  .layer-badge.unknown      { background: #1e2330; color: #6b7280; }
+
+  .ratio-bar {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .ratio-fill {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--accent);
+    transition: width 0.5s ease;
+    min-width: 2px;
+  }
+  .ratio-text { color: var(--text-dim); font-size: 11px; }
+  .count-badge {
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  /* ── Author Ranking ── */
+  .author-list { display: flex; flex-direction: column; gap: 10px; }
+  .author-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    transition: border-color 0.2s;
+  }
+  .author-item:hover { border-color: var(--muted); }
+  .author-rank {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    width: 20px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .author-rank.top { color: var(--yellow); }
+  .avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .author-info { flex: 1; }
+  .author-name {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .author-meta {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+  .author-delta {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .delta-good  { color: var(--green); }
+  .delta-bad   { color: var(--accent); }
+  .delta-zero  { color: var(--text-dim); }
+
+  /* ── Trend chart ── */
+  .chart-wrap { position: relative; height: 220px; }
+
+  /* ── Recent checks table ── */
+  .checks-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .checks-table th {
+    text-align: left;
+    padding: 8px 10px;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+  .checks-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(30,35,48,0.5);
+    vertical-align: middle;
+  }
+  .checks-table tr:last-child td { border-bottom: none; }
+  .checks-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .delta-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .delta-pill.good { background: rgba(58,219,118,0.12); color: var(--green); }
+  .delta-pill.bad  { background: rgba(224,92,58,0.12);  color: var(--accent); }
+  .delta-pill.none { background: rgba(106,114,128,0.15); color: var(--text-dim); }
+
+  .sha { color: var(--blue); font-size: 11px; }
+  .pr-link { color: var(--text-dim); }
+  .pr-link a { color: var(--blue); text-decoration: none; }
+  .pr-link a:hover { text-decoration: underline; }
+
+  /* ── Loading / Empty ── */
+  .loading {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align: center;
+    padding: 32px;
+    animation: blink 1.2s infinite;
+  }
+  @keyframes blink { 50% { opacity: 0.4; } }
+  .empty {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align: center;
+    padding: 24px;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">arch<span>/</span>dashboard</div>
+  <div style="font-size:11px;color:var(--text-dim);font-family:var(--mono);">레이어 아키텍처 위반 추적</div>
+  <div class="repo-filter">
+    <label>REPO</label>
+    <input type="text" id="repoInput" placeholder="owner/repo (전체는 비워두기)" />
+    <button class="btn" onclick="loadAll()">조회</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- Summary Cards -->
+  <div class="summary-row">
+    <div class="card red">
+      <div class="card-label">현재 위반 수</div>
+      <div class="card-value red" id="latestViolations">—</div>
+      <div class="card-sub" id="latestSub">최신 체크 기준</div>
+    </div>
+    <div class="card green">
+      <div class="card-label">최저 달성치</div>
+      <div class="card-value green" id="bestViolations">—</div>
+      <div class="card-sub">역대 최저</div>
+    </div>
+    <div class="card blue">
+      <div class="card-label">총 체크 횟수</div>
+      <div class="card-value blue" id="totalChecks">—</div>
+      <div class="card-sub" id="contributorSub">—명이 기여</div>
+    </div>
+    <div class="card yellow">
+      <div class="card-label">최고 기여자</div>
+      <div class="card-value yellow" id="topAuthor" style="font-size:18px;margin-top:4px">—</div>
+      <div class="card-sub" id="topAuthorSub">—</div>
+    </div>
+  </div>
+
+  <!-- Trend + Layer violations -->
+  <div class="two-col">
+
+    <div class="card full-col" style="grid-column:1/2">
+      <div class="section-title">위반 수 추이</div>
+      <div class="chart-wrap">
+        <canvas id="trendChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card" style="grid-column:2/3">
+      <div class="section-title">레이어 경계별 위반 비중</div>
+      <div class="heatmap-wrap" id="layerTable">
+        <div class="loading">loading...</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Author ranking + Recent checks -->
+  <div class="two-col">
+
+    <div class="card">
+      <div class="section-title">기여자 개선 랭킹</div>
+      <div class="author-list" id="authorList">
+        <div class="loading">loading...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">최근 체크 이력</div>
+      <div style="overflow-x:auto">
+        <table class="checks-table">
+          <thead>
+            <tr>
+              <th>PR</th>
+              <th>Author</th>
+              <th>Violations</th>
+              <th>Delta</th>
+              <th>Commit</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody id="checksBody">
+            <tr><td colspan="6" class="loading">loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+<script>
+const API = '';
+let trendChart = null;
+
+const LAYER_COLORS = {
+  presentation: '#4a90e2',
+  domains:       '#3adb76',
+  infrastructure:'#f0c040',
+  data_access:   '#e05c3a',
+};
+
+function repo() {
+  return document.getElementById('repoInput').value.trim() || null;
+}
+
+function qs(path) {
+  const r = repo();
+  return r ? `${path}?repo=${encodeURIComponent(r)}` : path;
+}
+
+async function get(path) {
+  const res = await fetch(API + path);
+  if (!res.ok) throw new Error(res.statusText);
+  return res.json();
+}
+
+// ── Summary ──
+async function loadSummary() {
+  const d = await get(qs('/api/stats/summary'));
+  document.getElementById('latestViolations').textContent = d.latest_violations ?? '—';
+  document.getElementById('bestViolations').textContent   = d.best_violations ?? '—';
+  document.getElementById('totalChecks').textContent      = d.total_checks ?? '—';
+  document.getElementById('contributorSub').textContent   = `${d.contributor_count ?? 0}명이 기여`;
+}
+
+// ── Trend Chart ──
+async function loadTrend() {
+  const data = await get(qs('/api/stats/trend?limit=30'));
+  const labels = data.map(d => d.checked_at.slice(5, 16).replace('T', ' '));
+  const values = data.map(d => d.violation_count);
+
+  if (trendChart) trendChart.destroy();
+
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  trendChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        borderColor: '#e05c3a',
+        backgroundColor: 'rgba(224,92,58,0.08)',
+        borderWidth: 2,
+        pointRadius: 4,
+        pointBackgroundColor: data.map(d =>
+          d.delta < 0 ? '#3adb76' : d.delta > 0 ? '#e05c3a' : '#4a5160'
+        ),
+        pointBorderColor: 'transparent',
+        tension: 0.3,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#13161b',
+          borderColor: '#1e2330',
+          borderWidth: 1,
+          titleColor: '#c8cdd8',
+          bodyColor: '#6b7280',
+          titleFont: { family: 'JetBrains Mono', size: 11 },
+          bodyFont:  { family: 'JetBrains Mono', size: 11 },
+          callbacks: {
+            afterLabel: (ctx) => {
+              const d = data[ctx.dataIndex];
+              const delta = d.delta != null
+                ? (d.delta > 0 ? `+${d.delta}` : `${d.delta}`)
+                : '—';
+              return `author: ${d.author}  delta: ${delta}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#4a5160', font: { family: 'JetBrains Mono', size: 10 }, maxRotation: 0 },
+          grid: { color: 'rgba(30,35,48,0.8)' },
+        },
+        y: {
+          ticks: { color: '#4a5160', font: { family: 'JetBrains Mono', size: 10 } },
+          grid: { color: 'rgba(30,35,48,0.8)' },
+          beginAtZero: true,
+        }
+      }
+    }
+  });
+}
+
+// ── Layer violations ──
+function layerBadge(layer) {
+  const cls = ['presentation','domains','infrastructure','data_access'].includes(layer) ? layer : 'unknown';
+  return `<span class="layer-badge ${cls}">${layer}</span>`;
+}
+
+async function loadLayerStats() {
+  const el = document.getElementById('layerTable');
+  const data = await get(qs('/api/stats/layer-violations'));
+
+  if (!data.length) { el.innerHTML = '<div class="empty">위반 없음 🎉</div>'; return; }
+
+  const maxCount = data[0].count;
+  el.innerHTML = `
+    <table class="heatmap-table">
+      <thead><tr>
+        <th>FROM</th><th>TO</th><th>건수</th><th>비중</th>
+      </tr></thead>
+      <tbody>
+        ${data.map(d => `
+          <tr>
+            <td>${layerBadge(d.from_layer)}</td>
+            <td>${layerBadge(d.to_layer)}</td>
+            <td><span class="count-badge">${d.count}</span></td>
+            <td>
+              <div class="ratio-bar">
+                <div class="ratio-fill" style="width:${Math.round(d.ratio / 100 * 120)}px"></div>
+                <span class="ratio-text">${d.ratio}%</span>
+              </div>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ── Author ranking ──
+function avatarColor(name) {
+  const colors = ['#4a90e2','#3adb76','#f0c040','#e05c3a','#9b59b6','#1abc9c'];
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) & 0xffffffff;
+  return colors[Math.abs(h) % colors.length];
+}
+
+async function loadAuthors() {
+  const el = document.getElementById('authorList');
+  const data = await get(qs('/api/stats/authors'));
+
+  if (!data.length) { el.innerHTML = '<div class="empty">데이터 없음</div>'; return; }
+
+  // 최고 기여자 카드 업데이트
+  const top = data[0];
+  document.getElementById('topAuthor').textContent = top.author;
+  document.getElementById('topAuthorSub').textContent =
+    `총 ${Math.abs(top.total_improved)}건 개선`;
+
+  el.innerHTML = data.slice(0, 8).map((d, i) => {
+    const delta = d.total_improved;
+    const deltaClass = delta < 0 ? 'delta-good' : delta > 0 ? 'delta-bad' : 'delta-zero';
+    const deltaStr  = delta < 0 ? `${delta}` : delta > 0 ? `+${delta}` : '±0';
+    const initial = d.author[0].toUpperCase();
+    const color = avatarColor(d.author);
+    return `
+      <div class="author-item">
+        <div class="author-rank ${i === 0 ? 'top' : ''}">${i === 0 ? '★' : '#' + (i+1)}</div>
+        <div class="avatar" style="background:${color}22;color:${color}">${initial}</div>
+        <div class="author-info">
+          <div class="author-name">${d.author}</div>
+          <div class="author-meta">${d.pr_count}번 기여 · 최고 단일 개선 ${d.best_delta ?? '—'}건</div>
+        </div>
+        <div class="author-delta ${deltaClass}">${deltaStr}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ── Recent checks ──
+async function loadChecks() {
+  const tbody = document.getElementById('checksBody');
+  const data = await get(qs('/api/checks?limit=20'));
+
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">체크 이력 없음</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = data.map(d => {
+    const delta = d.delta;
+    let pillClass = 'none', pillText = '—';
+    if (delta != null) {
+      if (delta < 0) { pillClass = 'good'; pillText = `▼ ${Math.abs(delta)}`; }
+      else if (delta > 0) { pillClass = 'bad'; pillText = `▲ ${delta}`; }
+      else { pillClass = 'none'; pillText = '±0'; }
+    }
+    const pr = d.pr_number ? `<a href="#" class="pr-link">#${d.pr_number}</a>` : '<span style="color:var(--text-dim)">—</span>';
+    const sha = d.commit_sha ? `<span class="sha">${d.commit_sha.slice(0,7)}</span>` : '—';
+    const time = d.checked_at ? d.checked_at.slice(0, 16).replace('T', ' ') : '—';
+    return `
+      <tr>
+        <td class="pr-link">${pr}</td>
+        <td style="color:var(--text)">${d.author}</td>
+        <td style="font-weight:700">${d.violation_count}</td>
+        <td><span class="delta-pill ${pillClass}">${pillText}</span></td>
+        <td>${sha}</td>
+        <td style="color:var(--text-dim);font-size:11px">${time}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function loadAll() {
+  await Promise.all([
+    loadSummary(),
+    loadTrend(),
+    loadLayerStats(),
+    loadAuthors(),
+    loadChecks(),
+  ]);
+}
+
+loadAll();
+// 30초마다 자동 갱신
+setInterval(loadAll, 30000);
+</script>
+</body>
+</html>

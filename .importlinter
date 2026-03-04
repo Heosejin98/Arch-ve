@@ -1,0 +1,16 @@
+# .importlinter
+# 프로젝트 루트에 이 파일을 위치시키세요
+
+[importlinter]
+root_package = app
+
+[importlinter:contract:layered-architecture]
+name = Layered Architecture (presentation → domains → infrastructure → data_access)
+type = layers
+layers =
+    presentation
+    domains
+    infrastructure
+    data_access
+containers =
+    app

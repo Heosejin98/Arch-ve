@@ -1,0 +1,47 @@
+name: Architecture Violation Check
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+
+jobs:
+  arch-check:
+    name: Layer Architecture Check
+    runs-on: self-hosted   # 내부망 runner 사용
+    # runs-on: ubuntu-latest  # 외부 runner 사용 시
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install import-linter
+          # 프로젝트 의존성도 설치 (import 분석을 위해)
+          pip install -r requirements.txt
+
+      - name: Run Architecture Check & Report
+        env:
+          DASHBOARD_URL: ${{ vars.ARCH_DASHBOARD_URL }}   # 예: http://10.10.x.x:8080
+        run: |
+          python scripts/report_arch.py \
+            --dashboard-url "$DASHBOARD_URL" \
+            --repo          "${{ github.repository }}" \
+            --author        "${{ github.actor }}" \
+            --branch        "${{ github.ref_name }}" \
+            --commit        "${{ github.sha }}" \
+            --pr-number     "${{ github.event.pull_request.number }}"
+
+      - name: Fail on architecture violations (optional)
+        # 위반이 있으면 CI를 실패시키려면 아래 주석 해제
+        # lint-imports 자체는 위반 시 exit code 1 반환
+        run: lint-imports
+        continue-on-error: true   # 일단 경고만, 실패시키려면 이 줄 제거
